@@ -1,10 +1,18 @@
 from fastapi import FastAPI
+from contextlib import asynccontextmanager
 from app.db import pool
 from datetime import datetime
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await pool.open()
+    yield
+    await pool.close()
+
 app = FastAPI(
     title = "MCDb API",
-    version = "0.1.0"
+    version = "0.1.0",
+    lifespan = lifespan
 )
 
 # ROUTES
