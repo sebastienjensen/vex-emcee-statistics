@@ -7,4 +7,5 @@ pool = AsyncConnectionPool(
     max_size=5,
     timeout=10,
     kwargs={"prepare_threshold": 0},
+    open=False,
 )
