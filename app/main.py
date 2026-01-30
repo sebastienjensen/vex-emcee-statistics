@@ -1,7 +1,9 @@
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
-from app.db import pool
+from app.fetch import fetch
+from app.db import pool, insert
 from datetime import datetime
+from pydantic import BaseModel
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -15,13 +17,26 @@ app = FastAPI(
     lifespan = lifespan
 )
 
+# RESPONSE MODELS
+
+class PingResponse(BaseModel):
+    api: str
+    time: datetime
+
+class DatabaseStatusResponse(BaseModel):
+    database: str
+    time: datetime
+
+class RefreshResponse(BaseModel):
+    status: str
+
 # ROUTES
 
-@app.get("/")
+@app.get("/", response_model=PingResponse, tags=["Status"])
 async def root():
     return {"api": "ok", "time": datetime.now().isoformat()}
 
-@app.get("/status")
+@app.get("/status", response_model=DatabaseStatusResponse, tags=["Status"])
 async def status():
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
@@ -29,3 +44,11 @@ async def status():
             await cur.fetchone()
 
     return {"database": "ok", "time": datetime.now().isoformat()}
+
+@app.get("/refresh/events", response_model=RefreshResponse, tags=["Refresh"])
+async def refresh_events():
+    async with pool.connection() as conn:
+        await insert(conn, "events", await fetch("events", {"season[]": [196, 197]}))
+        print("Events refreshed")
+    
+    return {"status": "ok"}
