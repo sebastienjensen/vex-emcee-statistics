@@ -1,6 +1,7 @@
 import asyncio
-from app.db import pool
+from app.db import pool, insert
 from app.db_schema import CREATE_TABLES_SQL
+from app.fetch import fetch
 
 async def init_db():    
     async with pool.connection() as conn:
@@ -9,6 +10,9 @@ async def init_db():
         
         for statement in statements:
             await conn.execute(statement)
+
+        await insert(conn, "programs", await fetch("programs", {}))
+        await insert(conn, "seasons", await fetch("seasons", {"active": True}))
         
         print("Database initialised")
 
