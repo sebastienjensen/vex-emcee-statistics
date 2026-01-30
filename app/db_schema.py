@@ -14,11 +14,12 @@ CREATE TABLE IF NOT EXISTS teams (
     id INTEGER PRIMARY KEY,
     number TEXT,
     name TEXT,
-    robot TEXT,
+    robot TEXT NULL,
     organization TEXT,
     city TEXT,
-    region TEXT,
+    region TEXT NULL,
     country TEXT,
+    grade TEXT,
     program INTEGER REFERENCES programs(id)
 );
 
@@ -58,13 +59,13 @@ CREATE TABLE IF NOT EXISTS matches (
     instance INTEGER,
     round INTEGER,
     season INTEGER REFERENCES seasons(id) ON DELETE CASCADE,
-    red1 INTEGER REFERENCES teams(id) ON DELETE CASCADE,
-    red2 INTEGER REFERENCES teams(id) ON DELETE CASCADE,
-    blue1 INTEGER REFERENCES teams(id) ON DELETE CASCADE,
-    blue2 INTEGER REFERENCES teams(id) ON DELETE CASCADE,
-    red INTEGER,
-    blue INTEGER,
-    auton TEXT
+    red1 INTEGER NULL REFERENCES teams(id) ON DELETE CASCADE,
+    red2 INTEGER NULL REFERENCES teams(id) ON DELETE CASCADE,
+    blue1 INTEGER NULL REFERENCES teams(id) ON DELETE CASCADE,
+    blue2 INTEGER NULL REFERENCES teams(id) ON DELETE CASCADE,
+    red INTEGER NULL,
+    blue INTEGER NULL,
+    auton TEXT NULL
 );
 
 ALTER TABLE programs ENABLE ROW LEVEL SECURITY;
