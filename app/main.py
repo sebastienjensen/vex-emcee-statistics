@@ -1,7 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 from app.fetch import fetch
-from app.db import pool, insert
+from app.db import pool, insert, event_by_sku
 from datetime import datetime
 from pydantic import BaseModel
 
@@ -30,6 +30,9 @@ class DatabaseStatusResponse(BaseModel):
 class RefreshResponse(BaseModel):
     status: str
 
+class UtilityResponse(BaseModel):
+    id: int
+
 # ROUTES
 
 @app.get("/", response_model=PingResponse, tags=["Status"])
@@ -52,3 +55,18 @@ async def refresh_events():
         print("Events refreshed")
     
     return {"status": "ok"}
+
+@app.get("/refresh/events/{id}", response_model=RefreshResponse, tags=["Refresh"])
+async def refresh_event(id: int):
+    async with pool.connection() as conn:
+        pass
+
+@app.get("/utilities/events/{sku}", response_model=UtilityResponse, tags=["Utilities"])
+async def get_id_from_sku(sku: str):
+    async with pool.connection() as conn:
+        id = await event_by_sku(conn, sku)
+
+    if id is None:
+        raise HTTPException(status_code=404, detail="SKU not found")
+    
+    return {"id": id}

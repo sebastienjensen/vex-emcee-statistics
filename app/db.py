@@ -21,7 +21,7 @@ async def insert(conn, table, data):
                     ON CONFLICT (id) DO NOTHING
                 """, (program["id"], program["name"]))
         case "seasons":
-            for season in data:
+            for i, season in data:
                 await cur.execute("""
                     INSERT INTO seasons (id, program, name) VALUES (%s, %s, %s)
                     ON CONFLICT (id) DO NOTHING
@@ -34,3 +34,9 @@ async def insert(conn, table, data):
                 """, (event["id"], event["sku"], event["name"], event["location"]["city"], event["location"]["country"], event["season"]["id"], len(event["divisions"]), event["start"]))
                 if (i + 1) % max(1, total // 10) == 0:
                     print(f"Inserted events: {i+1}/{total} ({int((i+1)/total*100)}%)")
+
+async def event_by_sku(conn, sku):
+    cur = conn.cursor()
+    await cur.execute("SELECT id FROM events WHERE sku = %s", (sku,))
+    row = await cur.fetchone()
+    return row[0] if row else None
