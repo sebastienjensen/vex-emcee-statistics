@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS awards (
 CREATE TABLE IF NOT EXISTS matches (
     id INTEGER PRIMARY KEY,
     event INTEGER REFERENCES events(id) ON DELETE CASCADE,
-    division TEXT,
+    division INTEGER,
     name TEXT,
     number INTEGER,
     instance INTEGER,
