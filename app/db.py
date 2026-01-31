@@ -46,7 +46,7 @@ async def insert(conn, table, data):
                 for division in data:
                     await cur.execute("""
                         INSERT INTO divisions (id, name, event) VALUES (%s, %s, %s)
-                        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, event = EXCLUDED.event
+                        ON CONFLICT (event, id) DO UPDATE SET name = EXCLUDED.name
                     """, (division["id"], division["name"], division["event"]["id"]))
                     print(f"Inserted divisions: {division['id']} from event {division['event']['id']}")
             case "awards":
