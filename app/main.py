@@ -77,8 +77,10 @@ async def refresh_event(id: int):
                 team_events = await fetch(f"teams/{team['id']}/events", {"season[]": [196, 197]})
                 await asyncio.sleep(2)
                 for event in team_events:
+                    if event["id"] == id:
+                        continue  # Skip the current event
                     if event["id"] not in events:
-                        events.append(event['id'])
+                        events.append(event["id"])
             print(f"To fetch teams, awards, matches from: {events}")
             for i, event in enumerate(events, start=1):
                 event_data_list = await fetch(f"events/{event}", {})
