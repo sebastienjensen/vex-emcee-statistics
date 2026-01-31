@@ -36,10 +36,11 @@ CREATE TABLE IF NOT EXISTS events (
 );
 
 CREATE TABLE IF NOT EXISTS divisions (
-    id INTEGER PRIMARY KEY,
-    name TEXT,
     event INTEGER REFERENCES events(id) ON DELETE CASCADE,
-    rankings JSONB NULL
+    id INTEGER,
+    name TEXT,
+    rankings JSONB NULL,
+    PRIMARY KEY (event, id)
 );
 
 CREATE TABLE IF NOT EXISTS awards (
