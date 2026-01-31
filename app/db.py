@@ -42,6 +42,13 @@ async def insert(conn, table, data):
                     """, (team["id"], team["number"], team["team_name"], team["robot_name"], team["organization"], team["location"]["city"], team["location"]["region"], team["location"]["country"], team["grade"], team["program"]["id"]))
                     if (i + 1) % max(1, total // 10) == 0:
                         print(f"Inserted teams: {i+1}/{total} ({int((i+1)/total*100)}%)")
+            case "divisions":
+                for division in data:
+                    await cur.execute("""
+                        INSERT INTO divisions (id, name, event) VALUES (%s, %s, %s)
+                        ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, event = EXCLUDED.event
+                    """, (division["id"], division["name"], division["event"]["id"]))
+                    print(f"Inserted divisions: {division['id']} from event {division['event']['id']}")
             case "awards":
                 for i, award in enumerate(data):
                     if "teamWinners" in award and award["teamWinners"]:
