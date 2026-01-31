@@ -1,3 +1,4 @@
+import asyncio
 from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 from app.fetch import fetch
@@ -48,27 +49,59 @@ async def status():
 
     return {"database": "ok", "time": datetime.now().isoformat()}
 
-@app.get("/refresh/events/{id}", response_model=RefreshResponse, tags=["Refresh"])
-async def refresh_event(id: int):
-    async with pool.connection() as conn:
-        cur = conn.cursor()
-        await insert(conn, "teams", await fetch(f"events/{id}/teams", {"id": id}))
-        print(f"Event {id} teams refreshed")
-        await cur.execute("SELECT divisions FROM events WHERE id = %s", (id,))
-        row = await cur.fetchone()
-        divisions = row[0] if row else 0
-        for division in range(1, divisions + 1):
-            matches = await fetch(f"events/{id}/divisions/{division}/matches", {})
-            await insert(conn, "matches", matches)
-
-    return {"status": "ok"}
-
 @app.get("/refresh/events/all", response_model=RefreshResponse, tags=["Refresh"])
 async def refresh_events():
     async with pool.connection() as conn:
         await insert(conn, "events", await fetch("events", {"season[]": [196, 197]}))
         print("Events refreshed")
     
+    return {"status": "ok"}
+
+@app.get("/refresh/events/{id}", response_model=RefreshResponse, tags=["Refresh"])
+async def refresh_event(id: int):
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            teams = await fetch(f"events/{id}/teams", {"id": id})
+            await insert(conn, "teams", teams)
+            print(f"Event {id} teams refreshed")
+            await cur.execute("SELECT divisions FROM events WHERE id = %s", (id,))
+            row = await cur.fetchone()
+            divisions = row[0] if row else 0
+            for division in range(1, divisions + 1):
+                matches = await fetch(f"events/{id}/divisions/{division}/matches", {})
+                await asyncio.sleep(2)
+                await insert(conn, "matches", matches)
+            inserted_teams = {team["id"] for team in teams}
+            events = []
+            for team in teams:
+                team_events = await fetch(f"teams/{team['id']}/events", {"season[]": [196, 197]})
+                await asyncio.sleep(2)
+                for event in team_events:
+                    if event["id"] not in events:
+                        events.append(event['id'])
+            print(f"To fetch teams, awards, matches from: {events}")
+            for i, event in enumerate(events, start=1):
+                event_data_list = await fetch(f"events/{event}", {})
+                await asyncio.sleep(2)
+                event_data = event_data_list[0] if event_data_list else {}
+                divisions = len(event_data.get("divisions") or [])
+                event_teams = await fetch(f"events/{event}/teams", {})
+                await asyncio.sleep(2)
+                if event_teams:
+                    new_event_teams = [team for team in event_teams if team["id"] not in inserted_teams]
+                    if new_event_teams:
+                        await insert(conn, "teams", new_event_teams)
+                        inserted_teams.update(team["id"] for team in new_event_teams)
+                awards = await fetch(f"events/{event}/awards", {})
+                await asyncio.sleep(2)
+                if awards:
+                    await insert(conn, "awards", awards)
+                for division in range(1, divisions + 1):
+                    matches = await fetch(f"events/{event}/divisions/{division}/matches", {})
+                    await asyncio.sleep(2)
+                    await insert(conn, "matches", matches)
+                print(f"Processed tangential event {event} ({i}/{len(events)})")
+
     return {"status": "ok"}
 
 @app.get("/refresh/teams", response_model=RefreshResponse, tags=["Refresh"])
