@@ -23,7 +23,12 @@ async def fetch(target, params):
                 response = await client.get(endpoint, headers=headers, params=request_params)
                 data = response.json()
                 
-                # If no data returned, we've reached the end
+                # Handle single resource endpoints (no "data" wrapper)
+                if "data" not in data:
+                    output.append(data)
+                    break
+                
+                # Handle paginated endpoints
                 if not data["data"]:
                     break
                 
@@ -35,7 +40,7 @@ async def fetch(target, params):
                     break
 
                 page += 1
-                await asyncio.sleep(1) # Rate limiting
+                await asyncio.sleep(1)
         
         print(f"Fetched {len(output)} {target}")
         return output
