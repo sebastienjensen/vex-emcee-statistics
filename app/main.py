@@ -118,7 +118,7 @@ async def refresh_event(id: int):
 
     return {"status": "ok"}
 
-@app.get("/refresh/rankings/events/{id}", response_model=RefreshResponse, tags=["Refresh"])
+@app.get("/refresh/rankings/{id}", response_model=RefreshResponse, tags=["Refresh"])
 async def refresh_rankings(id: int):
     async with pool.connection() as conn:
         async with conn.cursor() as cur:
@@ -127,10 +127,6 @@ async def refresh_rankings(id: int):
             row = await cur.fetchone()
             divisions = row[0] if row else 0
             
-            if divisions == 0:
-                print(f"Event {id} has no divisions")
-                return {"status": "ok"}
-            
             # Fetch and insert rankings for each division
             for division in range(1, divisions + 1):
                 rankings = await fetch(f"events/{id}/divisions/{division}/rankings", {})
@@ -138,6 +134,13 @@ async def refresh_rankings(id: int):
                 if rankings:
                     await insert(conn, "rankings", rankings)
                     print(f"Refreshed rankings for event {id} division {division}")
+        
+            # Fetch and insert skills rankings
+            skills = await fetch(f"events/{id}/skills", {})
+            await asyncio.sleep(1)
+            if skills:
+                await insert(conn, "skills", skills)
+                print(f"Refreshed skills rankings for event {id}")
     
     return {"status": "ok"}
 

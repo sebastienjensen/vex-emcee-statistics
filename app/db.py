@@ -59,6 +59,14 @@ async def insert(conn, table, data):
                         UPDATE divisions SET rankings = %s WHERE event = %s AND id = %s
                     """, (Json(data), event_id, division_id))
                     print(f"Updated rankings for division {division_id} in event {event_id} with {len(data)} rankings")
+            case "skills":
+                if data:
+                    first_skills = data[0]
+                    event_id = first_skills["event"]["id"]
+                    await cur.execute("""
+                        UPDATE events SET skills = %s WHERE id = %s
+                    """, (Json(data), event_id))
+                    print(f"Updated skills rankings for event {event_id} with {len(data)} skills entries")
             case "awards":
                 for i, award in enumerate(data):
                     if "teamWinners" in award and award["teamWinners"]:
