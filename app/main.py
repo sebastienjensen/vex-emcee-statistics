@@ -60,70 +60,86 @@ async def refresh_events():
 @app.get("/refresh/events/{id}", response_model=RefreshResponse, tags=["Refresh"])
 async def refresh_event(id: int):
     async with pool.connection() as conn:
-        async with conn.cursor() as cur:
-            # Fetch and insert event data
-            event_data_list = await fetch(f"events/{id}", {})
+        # Fetch and insert event data
+        event_data_list = await fetch(f"events/{id}", {})
+        await asyncio.sleep(1)
+        event_data = event_data_list[0] if event_data_list else {}
+        
+        # Extract and insert divisions for current event
+        divisions_data = event_data.get("divisions") or []
+        if divisions_data:
+            # Add event ID to each division
+            for division in divisions_data:
+                division["event"] = {"id": id}
+            await insert(conn, "divisions", divisions_data)
+        
+        teams = await fetch(f"events/{id}/teams", {"id": id})
+        await asyncio.sleep(1)
+        await insert(conn, "teams", teams)
+        print(f"Event {id} teams refreshed")
+        
+        divisions = len(divisions_data)
+        for division in range(1, divisions + 1):
+            matches = await fetch(f"events/{id}/divisions/{division}/matches", {})
+            await asyncio.sleep(1)
+            await insert(conn, "matches", matches)
+        inserted_teams = {team["id"] for team in teams}
+        events = []
+        for team in teams:
+            team_events = await fetch(f"teams/{team['id']}/events", {"season[]": [196, 197]})
+            await asyncio.sleep(1)
+            for event in team_events:
+                if event["id"] == id:
+                    continue  # Skip the current event
+                if event["id"] not in events:
+                    events.append(event["id"])
+        print(f"To fetch teams, awards, matches from: {events}")
+        for i, event in enumerate(events, start=1):
+            event_data_list = await fetch(f"events/{event}", {})
             await asyncio.sleep(1)
             event_data = event_data_list[0] if event_data_list else {}
-            
-            # Extract and insert divisions for current event
-            divisions_data = event_data.get("divisions") or []
-            if divisions_data:
-                # Add event ID to each division
-                for division in divisions_data:
-                    division["event"] = {"id": id}
-                await insert(conn, "divisions", divisions_data)
-            
-            teams = await fetch(f"events/{id}/teams", {"id": id})
-            await asyncio.sleep(1)
-            await insert(conn, "teams", teams)
-            print(f"Event {id} teams refreshed")
-            
             divisions = len(divisions_data)
+            event_teams = await fetch(f"events/{event}/teams", {})
+            await asyncio.sleep(1)
+            if event_teams:
+                new_event_teams = [team for team in event_teams if team["id"] not in inserted_teams]
+                if new_event_teams:
+                    await insert(conn, "teams", new_event_teams)
+                    inserted_teams.update(team["id"] for team in new_event_teams)
+            awards = await fetch(f"events/{event}/awards", {})
+            await asyncio.sleep(1)
+            if awards:
+                await insert(conn, "awards", awards)
             for division in range(1, divisions + 1):
-                matches = await fetch(f"events/{id}/divisions/{division}/matches", {})
+                matches = await fetch(f"events/{event}/divisions/{division}/matches", {})
                 await asyncio.sleep(1)
                 await insert(conn, "matches", matches)
-            inserted_teams = {team["id"] for team in teams}
-            events = []
-            for team in teams:
-                team_events = await fetch(f"teams/{team['id']}/events", {"season[]": [196, 197]})
-                await asyncio.sleep(1)
-                for event in team_events:
-                    if event["id"] == id:
-                        continue  # Skip the current event
-                    if event["id"] not in events:
-                        events.append(event["id"])
-            print(f"To fetch teams, awards, matches from: {events}")
-            for i, event in enumerate(events, start=1):
-                event_data_list = await fetch(f"events/{event}", {})
-                await asyncio.sleep(1)
-                event_data = event_data_list[0] if event_data_list else {}
-                divisions = len(divisions_data)
-                event_teams = await fetch(f"events/{event}/teams", {})
-                await asyncio.sleep(1)
-                if event_teams:
-                    new_event_teams = [team for team in event_teams if team["id"] not in inserted_teams]
-                    if new_event_teams:
-                        await insert(conn, "teams", new_event_teams)
-                        inserted_teams.update(team["id"] for team in new_event_teams)
-                awards = await fetch(f"events/{event}/awards", {})
-                await asyncio.sleep(1)
-                if awards:
-                    await insert(conn, "awards", awards)
-                for division in range(1, divisions + 1):
-                    matches = await fetch(f"events/{event}/divisions/{division}/matches", {})
-                    await asyncio.sleep(1)
-                    await insert(conn, "matches", matches)
-                print(f"Processed tangential event {event} ({i}/{len(events)})")
+            print(f"Processed tangential event {event} ({i}/{len(events)})")
 
     return {"status": "ok"}
 
 @app.get("/refresh/rankings/events/{id}", response_model=RefreshResponse, tags=["Refresh"])
 async def refresh_rankings(id: int):
     async with pool.connection() as conn:
-        # Implement the logic to refresh rankings for the event with the given id
-        pass
+        async with conn.cursor() as cur:
+            # Get the number of divisions for this event
+            await cur.execute("SELECT divisions FROM events WHERE id = %s", (id,))
+            row = await cur.fetchone()
+            divisions = row[0] if row else 0
+            
+            if divisions == 0:
+                print(f"Event {id} has no divisions")
+                return {"status": "ok"}
+            
+            # Fetch and insert rankings for each division
+            for division in range(1, divisions + 1):
+                rankings = await fetch(f"events/{id}/divisions/{division}/rankings", {})
+                await asyncio.sleep(1)
+                if rankings:
+                    await insert(conn, "rankings", rankings)
+                    print(f"Refreshed rankings for event {id} division {division}")
+    
+    return {"status": "ok"}
 
 @app.get("/refresh/teams", response_model=RefreshResponse, tags=["Refresh"])
 async def refresh_teams():
@@ -144,7 +160,7 @@ async def get_id_from_sku(sku: str):
     return {"id": id}
 
 @app.get("/utilities/teams/{number}", response_model=UtilityResponse, tags=["Utilities"])
-async def get_id_from_sku(number: str):
+async def get_id_from_number(number: str):
     async with pool.connection() as conn:
         id = await team_by_number(conn, number)
 

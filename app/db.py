@@ -1,4 +1,5 @@
 from psycopg_pool import AsyncConnectionPool
+from psycopg.types.json import Json
 from app.config import DATABASE_URL
 
 pool = AsyncConnectionPool(
@@ -49,6 +50,15 @@ async def insert(conn, table, data):
                         ON CONFLICT (event, id) DO UPDATE SET name = EXCLUDED.name
                     """, (division["id"], division["name"], division["event"]["id"]))
                     print(f"Inserted divisions: {division['id']} from event {division['event']['id']}")
+            case "rankings":
+                if data:
+                    first_ranking = data[0]
+                    event_id = first_ranking["event"]["id"]
+                    division_id = first_ranking["division"]["id"]
+                    await cur.execute("""
+                        UPDATE divisions SET rankings = %s WHERE event = %s AND id = %s
+                    """, (Json(data), event_id, division_id))
+                    print(f"Updated rankings for division {division_id} in event {event_id} with {len(data)} rankings")
             case "awards":
                 for i, award in enumerate(data):
                     if "teamWinners" in award and award["teamWinners"]:
