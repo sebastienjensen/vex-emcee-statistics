@@ -3,6 +3,7 @@ from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 from app.fetch import fetch
 from app.db import pool, insert, event_by_sku, team_by_number
+from app.stats import team_info, team_stats_refresh, team_stats_selection
 from datetime import datetime
 from pydantic import BaseModel
 
@@ -72,6 +73,7 @@ async def refresh_event(id: int):
             for division in divisions_data:
                 division["event"] = {"id": id}
             await insert(conn, "divisions", divisions_data)
+            await conn.commit()
         
         teams = await fetch(f"events/{id}/teams", {"id": id})
         await asyncio.sleep(1)
@@ -152,6 +154,25 @@ async def refresh_teams():
     
     return {"status": "ok"}
 
+@app.get("/refresh/matches/{event}", response_model=RefreshResponse, tags=["Refresh"])
+async def refresh_matches(event: int):
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("SELECT divisions FROM events WHERE id = %s", (event,))
+            row = await cur.fetchone()
+            divisions = row[0] if row else 0
+
+            await cur.execute("DELETE FROM matches WHERE event = %s", (event,))
+            
+            for division in range(1, divisions + 1):
+                matches = await fetch(f"events/{event}/divisions/{division}/matches", {})
+                await asyncio.sleep(1)
+                if matches:
+                    await insert(conn, "matches", matches)
+                    print(f"Refreshed matches for event {event} division {division}")
+    
+    return {"status": "ok"}
+
 @app.get("/utilities/events/{sku}", response_model=UtilityResponse, tags=["Utilities"])
 async def get_id_from_sku(sku: str):
     async with pool.connection() as conn:
@@ -171,3 +192,88 @@ async def get_id_from_number(number: str):
         raise HTTPException(status_code=404, detail="Team number not found")
     
     return {"id": id}
+
+@app.get("/utilities/match/{event}/{division}/{round}/{instance}/{number}", tags=["Utilities"])
+async def get_id_from_match(event: int, division: int, round: int, instance: int, number: int):
+    async with pool.connection() as conn:
+        async with conn.cursor() as cur:
+            await cur.execute("""
+                SELECT id, red1, red2, blue1, blue2 FROM matches 
+                WHERE event = %s 
+                AND division = %s 
+                AND round = %s 
+                AND instance = %s 
+                AND number = %s
+            """, (event, division, round, instance, number))
+            row = await cur.fetchone()
+            if row:
+                id, red1, red2, blue1, blue2 = row
+            else:
+                id = None
+
+    if id is None:
+        raise HTTPException(status_code=404, detail="Match not found")
+    
+    return {"id": id, "teams": {"red1": red1, "red2": red2, "blue1": blue1, "blue2": blue2}}
+
+@app.get("/stats/match/{event}/{division}/{round}/{instance}/{number}", tags=["Stats"])
+async def get_match_stats(event: int, division: int, round: int, instance: int, number: int):
+    async with pool.connection() as conn:
+        match_data = await get_id_from_match(event, division, round, instance, number)
+        match_id = match_data["id"]
+        program = 41 if (match_data["teams"]["red2"] is None or match_data["teams"]["blue2"] is None) else 1
+
+        # Get all teams at the event
+        async with conn.cursor() as cur:
+            await cur.execute("""
+                SELECT DISTINCT team_id
+                FROM (
+                    SELECT red1 AS team_id FROM matches WHERE event = %s AND red1 IS NOT NULL
+                    UNION
+                    SELECT red2 AS team_id FROM matches WHERE event = %s AND red2 IS NOT NULL
+                    UNION
+                    SELECT blue1 AS team_id FROM matches WHERE event = %s AND blue1 IS NOT NULL
+                    UNION
+                    SELECT blue2 AS team_id FROM matches WHERE event = %s AND blue2 IS NOT NULL
+                ) AS all_teams
+            """, (event, event, event, event))
+            teams = await cur.fetchall()
+        
+        # Refresh stats for each team in parallel (batches of 10)
+        total_teams = len(teams)
+        team_ids = [team_row[0] for team_row in teams]
+        batch_size = 10
+        
+        for i in range(0, len(team_ids), batch_size):
+            batch = team_ids[i:i+batch_size]
+            await asyncio.gather(*[team_stats_refresh(conn, team_id, event, match_id, program) for team_id in batch])
+            print(f"Refreshed stats for teams {i+1}-{min(i+batch_size, total_teams)} of {total_teams}")
+
+        if program == 1:
+            red1_stats, red2_stats, blue1_stats, blue2_stats, red1_info, red2_info, blue1_info, blue2_info = await asyncio.gather(
+                team_stats_selection(conn, match_data["teams"]["red1"], event, round, program),
+                team_stats_selection(conn, match_data["teams"]["red2"], event, round, program),
+                team_stats_selection(conn, match_data["teams"]["blue1"], event, round, program),
+                team_stats_selection(conn, match_data["teams"]["blue2"], event, round, program),
+                team_info(conn, match_data["teams"]["red1"]),
+                team_info(conn, match_data["teams"]["red2"]),
+                team_info(conn, match_data["teams"]["blue1"]),
+                team_info(conn, match_data["teams"]["blue2"])
+            )
+            return {
+                "red1": {"info": red1_info, "stats": red1_stats},
+                "red2": {"info": red2_info, "stats": red2_stats},
+                "blue1": {"info": blue1_info, "stats": blue1_stats},
+                "blue2": {"info": blue2_info, "stats": blue2_stats}
+            }
+        else:
+            red1_stats, blue1_stats, red1_info, blue1_info = await asyncio.gather(
+                team_stats_selection(conn, match_data["teams"]["red1"], event, round, program),
+                team_stats_selection(conn, match_data["teams"]["blue1"], event, round, program),
+                team_info(conn, match_data["teams"]["red1"]),
+                team_info(conn, match_data["teams"]["blue1"])
+            )
+            return {
+                "red1": {"info": red1_info, "stats": red1_stats},
+                "blue1": {"info": blue1_info, "stats": blue1_stats}
+            }
