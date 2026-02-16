@@ -1,5 +1,8 @@
 import asyncio
+import json
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.fetch import fetch
 from app.db import pool, insert, event_by_sku, team_by_number
@@ -17,6 +20,13 @@ app = FastAPI(
     title = "MCDb API",
     version = "0.1.0",
     lifespan = lifespan
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # RESPONSE MODELS
@@ -216,64 +226,91 @@ async def get_id_from_match(event: int, division: int, round: int, instance: int
     
     return {"id": id, "teams": {"red1": red1, "red2": red2, "blue1": blue1, "blue2": blue2}}
 
-@app.get("/stats/match/{event}/{division}/{round}/{instance}/{number}", tags=["Stats"])
-async def get_match_stats(event: int, division: int, round: int, instance: int, number: int):
-    async with pool.connection() as conn:
-        match_data = await get_id_from_match(event, division, round, instance, number)
-        match_id = match_data["id"]
-        program = 41 if (match_data["teams"]["red2"] is None or match_data["teams"]["blue2"] is None) else 1
+@app.get("/stats/match/{event}/{division}/{round}/{instance}/{number}/{penalty}", tags=["Stats"])
+async def get_match_stats(event: int, division: int, round: int, instance: int, number: int, penalty: int = 90):
+    async def event_stream():
+        def sse(event_name, payload):
+            return f"event: {event_name}\ndata: {json.dumps(payload)}\n\n"
 
-        # Get all teams at the event
-        async with conn.cursor() as cur:
-            await cur.execute("""
-                SELECT DISTINCT team_id
-                FROM (
-                    SELECT red1 AS team_id FROM matches WHERE event = %s AND red1 IS NOT NULL
-                    UNION
-                    SELECT red2 AS team_id FROM matches WHERE event = %s AND red2 IS NOT NULL
-                    UNION
-                    SELECT blue1 AS team_id FROM matches WHERE event = %s AND blue1 IS NOT NULL
-                    UNION
-                    SELECT blue2 AS team_id FROM matches WHERE event = %s AND blue2 IS NOT NULL
-                ) AS all_teams
-            """, (event, event, event, event))
-            teams = await cur.fetchall()
-        
-        # Refresh stats for each team in parallel (batches of 10)
-        total_teams = len(teams)
-        team_ids = [team_row[0] for team_row in teams]
-        batch_size = 10
-        
-        for i in range(0, len(team_ids), batch_size):
-            batch = team_ids[i:i+batch_size]
-            await asyncio.gather(*[team_stats_refresh(conn, team_id, event, match_id, program) for team_id in batch])
-            print(f"Refreshed stats for teams {i+1}-{min(i+batch_size, total_teams)} of {total_teams}")
+        try:
+            yield sse("progress", {"step": "Refreshing_event_matches", "percent": 0})
+            await refresh_matches(event)
 
-        if program == 1:
-            red1_stats, red2_stats, blue1_stats, blue2_stats, red1_info, red2_info, blue1_info, blue2_info = await asyncio.gather(
-                team_stats_selection(conn, match_data["teams"]["red1"], event, round, program),
-                team_stats_selection(conn, match_data["teams"]["red2"], event, round, program),
-                team_stats_selection(conn, match_data["teams"]["blue1"], event, round, program),
-                team_stats_selection(conn, match_data["teams"]["blue2"], event, round, program),
-                team_info(conn, match_data["teams"]["red1"]),
-                team_info(conn, match_data["teams"]["red2"]),
-                team_info(conn, match_data["teams"]["blue1"]),
-                team_info(conn, match_data["teams"]["blue2"])
-            )
-            return {
-                "red1": {"info": red1_info, "stats": red1_stats},
-                "red2": {"info": red2_info, "stats": red2_stats},
-                "blue1": {"info": blue1_info, "stats": blue1_stats},
-                "blue2": {"info": blue2_info, "stats": blue2_stats}
-            }
-        else:
-            red1_stats, blue1_stats, red1_info, blue1_info = await asyncio.gather(
-                team_stats_selection(conn, match_data["teams"]["red1"], event, round, program),
-                team_stats_selection(conn, match_data["teams"]["blue1"], event, round, program),
-                team_info(conn, match_data["teams"]["red1"]),
-                team_info(conn, match_data["teams"]["blue1"])
-            )
-            return {
-                "red1": {"info": red1_info, "stats": red1_stats},
-                "blue1": {"info": blue1_info, "stats": blue1_stats}
-            }
+            yield sse("progress", {"step": "Refreshing_event_rankings", "percent": 30})
+            await refresh_rankings(event)
+
+            yield sse("progress", {"step": "Finding_match", "percent": 50})
+            match_data = await get_id_from_match(event, division, round, instance, number)
+            match_id = match_data["id"]
+            program = 41 if (match_data["teams"]["red2"] is None or match_data["teams"]["blue2"] is None) else 1
+
+            async with pool.connection() as conn:
+                # Get all teams at the event
+                async with conn.cursor() as cur:
+                    await cur.execute("""
+                        SELECT DISTINCT team_id
+                        FROM (
+                            SELECT red1 AS team_id FROM matches WHERE event = %s AND red1 IS NOT NULL
+                            UNION
+                            SELECT red2 AS team_id FROM matches WHERE event = %s AND red2 IS NOT NULL
+                            UNION
+                            SELECT blue1 AS team_id FROM matches WHERE event = %s AND blue1 IS NOT NULL
+                            UNION
+                            SELECT blue2 AS team_id FROM matches WHERE event = %s AND blue2 IS NOT NULL
+                        ) AS all_teams
+                    """, (event, event, event, event))
+                    teams = await cur.fetchall()
+
+                yield sse("progress", {"step": "Refreshing_team_statistics", "percent": 60, "totalTeams": len(teams)})
+
+                # Refresh stats for each team in parallel (batches of 10)
+                total_teams = len(teams)
+                team_ids = [team_row[0] for team_row in teams]
+                batch_size = 10
+
+                for i in range(0, len(team_ids), batch_size):
+                    batch = team_ids[i:i + batch_size]
+                    await asyncio.gather(*[
+                        team_stats_refresh(conn, team_id, event, match_id, program)
+                        for team_id in batch
+                    ])
+
+                yield sse("progress", {"step": "Selecting_team_statistics", "percent": 90})
+
+                if program == 1:
+                    red1_stats, red2_stats, blue1_stats, blue2_stats, red1_info, red2_info, blue1_info, blue2_info = await asyncio.gather(
+                        team_stats_selection(conn, match_data["teams"]["red1"], event, round, program, recency_minutes=penalty),
+                        team_stats_selection(conn, match_data["teams"]["red2"], event, round, program, recency_minutes=penalty),
+                        team_stats_selection(conn, match_data["teams"]["blue1"], event, round, program, recency_minutes=penalty),
+                        team_stats_selection(conn, match_data["teams"]["blue2"], event, round, program, recency_minutes=penalty),
+                        team_info(conn, match_data["teams"]["red1"]),
+                        team_info(conn, match_data["teams"]["red2"]),
+                        team_info(conn, match_data["teams"]["blue1"]),
+                        team_info(conn, match_data["teams"]["blue2"])
+                    )
+                    payload = {
+                        "red1": {"info": red1_info, "stats": red1_stats},
+                        "red2": {"info": red2_info, "stats": red2_stats},
+                        "blue1": {"info": blue1_info, "stats": blue1_stats},
+                        "blue2": {"info": blue2_info, "stats": blue2_stats}
+                    }
+                else:
+                    red1_stats, blue1_stats, red1_info, blue1_info = await asyncio.gather(
+                        team_stats_selection(conn, match_data["teams"]["red1"], event, round, program, recency_minutes=penalty),
+                        team_stats_selection(conn, match_data["teams"]["blue1"], event, round, program, recency_minutes=penalty),
+                        team_info(conn, match_data["teams"]["red1"]),
+                        team_info(conn, match_data["teams"]["blue1"])
+                    )
+                    payload = {
+                        "red1": {"info": red1_info, "stats": red1_stats},
+                        "blue1": {"info": blue1_info, "stats": blue1_stats}
+                    }
+
+            yield sse("progress", {"step": "Done", "percent": 100})
+            yield sse("result", payload)
+        except HTTPException as exc:
+            yield sse("error", {"message": exc.detail, "status": exc.status_code})
+        except Exception as exc:
+            yield sse("error", {"message": "Unexpected error", "detail": str(exc)})
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
