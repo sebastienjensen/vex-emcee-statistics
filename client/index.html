@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8">
+        <title>MCDb for VEX Robotics</title>
+
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="theme-color" content="#000">
+
+        <link rel="stylesheet" type="text/css" href="style.css">
+    </head>
+    <body>
+        <!-- Icon definitions -->
+        <svg style="display: none;">
+            <symbol id="team" viewBox="0 -960 960 960">
+                <path d="M-9.04-230.96V-303q0-47.52 46.82-76.78Q84.61-409.04 160-409.04q8.48 0 15.67.21 7.2.22 14.81 1.09-15.7 23.26-23.26 49.01-7.57 25.74-7.57 53.73v74.04H-9.04Zm240 0V-305q0-33.7 17.78-62.17 17.78-28.48 51.48-49.61 33.69-21.13 79.61-31.7 45.91-10.56 100.15-10.56 55.28 0 100.91 10.56 45.63 10.57 79.33 31.7 33.69 21.13 51.26 49.61 17.56 28.47 17.56 62.17v74.04H230.96Zm569.39 0V-305q0-29.04-7.35-54.72t-22.04-48.02q7.61-.87 14.65-1.09 7.04-.21 14.39-.21 76.07 0 122.56 28.97 46.48 28.97 46.48 77.07v72.04H800.35Zm-640.3-215.82q-35.31 0-60.51-25.13-25.19-25.14-25.19-60.43 0-36.36 25.13-61.05 25.13-24.7 60.42-24.7 36.36 0 61.06 24.61 24.69 24.61 24.69 60.99 0 35.32-24.61 60.51-24.61 25.2-60.99 25.2Zm640 0q-35.31 0-60.51-25.13-25.19-25.14-25.19-60.43 0-36.36 25.13-61.05 25.13-24.7 60.42-24.7 36.36 0 61.06 24.61 24.69 24.61 24.69 60.99 0 35.32-24.61 60.51-24.61 25.2-60.99 25.2ZM480-488.48q-53.77 0-91.41-37.64-37.63-37.63-37.63-91.4 0-54.39 37.63-91.72 37.64-37.33 91.41-37.33 54.39 0 91.72 37.33 37.32 37.33 37.32 91.72 0 53.77-37.32 91.4-37.33 37.64-91.72 37.64Z"/>
+            </symbol>
+            <symbol id="trophy" viewBox="0 -960 960 960">
+                <path d="M275.48-94v-106H427v-100.82q-49-12.7-88.35-42.64-39.35-29.93-60.17-75.36-88.57-1.09-149.53-66.07Q68-549.87 68-640v-40q0-44.3 30.85-75.15Q129.69-786 174-786h80v-80h452v80h80q44.31 0 75.15 30.85Q892-724.3 892-680v40q0 90.13-60.95 155.11-60.96 64.98-149.53 66.07-20.82 45.43-60.17 75.36Q582-313.52 533-300.82V-200h151.52v106H275.48ZM254-528v-152h-80v40q0 38 22 68.5t58 43.5Zm452 0q36-13 58-43.5t22-68.5v-40h-80v152Z"/>
+            </symbol>
+            <symbol id="flame" viewBox="0 -960 960 960">
+                <path d="M148.7-400q0-107.83 53.67-192.65 53.67-84.83 117.84-143.98 64.16-59.14 117.63-90.3l53.46-31.16V-708q0 31.77 21.52 50.23Q534.33-639.3 561-639.3q14.17 0 27.68-6.08t24.84-19.97l23.65-29.35q78.79 45.4 126.46 124.13Q811.3-491.83 811.3-400q0 89.92-43 164-43 74.09-113.56 117.78 18.87-26.13 29.41-57.15 10.55-31.03 10.55-65.87 0-43.54-16.11-81.66-16.1-38.11-46.16-68.17L480-540.31 328.83-391.13q-30.7 30.69-47.11 68.62-16.42 37.93-16.42 81.27 0 34.67 10.55 65.76 10.54 31.09 29.41 57.26Q234.7-161.91 191.7-236q-43-74.08-43-164Zm331.3 8.44 76.99 75.49q15.4 15.46 23.55 34.3 8.16 18.85 8.16 40.38 0 44.3-31.75 75.5-31.74 31.19-77.08 31.19-45.35 0-76.96-31.19-31.61-31.2-31.61-75.5 0-21.31 8.13-40.38 8.13-19.06 23.48-34.14L480-391.56Z"/>
+            </symbol>
+            <symbol id="leaderboard" viewBox="0 -960 960 960">
+                <path d="M60.78-100.78v-518.44h236.96v518.44H60.78Zm300.74 0v-758.44h236.96v758.44H361.52Zm300.74 0v-438.44h236.96v438.44H662.26Z"/>
+            </symbol>
+            <symbol id="star" viewBox="0 -960 960 960">
+                <path d="m363-310 117-71 117 71-31-133 104-90-137-11-53-126-53 126-137 11 104 90-31 133ZM480-6.52 343.17-140.78H140.78v-202.39L6.52-480l134.26-136.83v-202.39h202.39L480-954.04l136.83 134.82h202.39v202.39L954.04-480 819.22-343.17v202.39H616.83L480-6.52Z"/>
+            </symbol>
+            <symbol id="explosion" viewBox="0 -960 960 960">
+                <path d="m480-292.87 55.65-55.48h76.4v-76.17L667.7-480l-55.65-55.65v-76.4h-76.4L480-667.7l-55.48 55.65h-76.17v76.4L292.87-480l55.48 55.48v76.17h76.17L480-292.87Zm0 286.35L343.17-140.78H140.78v-202.39L6.52-480l134.26-136.83v-202.39h202.39L480-954.04l136.83 134.82h202.39v202.39L954.04-480 819.22-343.17v202.39H616.83L480-6.52Z"/>
+            </symbol>
+            <symbol id="route" viewBox="0 -960 960 960">
+                <path d="M222.41-159.65q-52.93-52.65-52.93-128.83v-310.04q-35.57-15.26-57.79-47.74Q89.48-678.74 89.48-720q0-55.65 38.95-94.33Q167.39-853 222.48-853q55.65 0 94.32 38.67 38.68 38.68 38.68 94.33 0 41.26-22.22 73.74t-57.78 47.74v310.04q0 31.31 22.08 53.39Q319.65-213 351.52-213t53.68-22.09q21.8-22.08 21.8-53.39v-383.04q0-76.18 52.65-128.83Q532.3-853 608.48-853q76.74 0 129.39 52.65 52.65 52.65 52.65 128.83v310.04q35.57 15.26 57.79 47.74 22.21 32.48 22.21 73.74 0 55.09-38.67 94.04Q793.18-107 737.52-107q-55.08 0-94.04-38.96-38.96-38.95-38.96-94.04 0-41.26 22.22-73.96 22.22-32.69 57.78-47.52v-310.04q0-31.87-22.08-53.68-22.09-21.8-53.96-21.8t-53.68 21.8Q533-703.39 533-671.52v383.04q0 76.18-52.65 128.83Q427.7-107 351.52-107q-76.17 0-129.11-52.65Z"/>
+            </symbol>
+            <symbol id="donut" viewBox="0 -960 960 960">
+                <path d="M480-6.52 343.17-140.78H140.78v-202.39L6.52-480l134.26-136.83v-202.39h202.39L480-954.04l136.83 134.82h202.39v202.39L954.04-480 819.22-343.17v202.39H616.83L480-6.52ZM616.7-343.3q56.52-56.51 56.52-136.69T616.7-616.7q-56.51-56.52-136.69-56.52T343.3-616.7q-56.52 56.51-56.52 136.69T343.3-343.3q56.51 56.52 136.69 56.52T616.7-343.3Zm-198.52-74.88q-25.4-25.39-25.4-61.82t25.4-61.82q25.39-25.4 61.82-25.4t61.82 25.4q25.4 25.39 25.4 61.82t-25.4 61.82q-25.39 25.4-61.82 25.4t-61.82-25.4Z"/>
+            </symbol>
+            <symbol id="pointer" viewBox="0 -960 960 960">
+                <path d="M166.78-140.78q-44.3 0-75.15-30.85-30.85-30.85-30.85-75.15v-466.44q0-44.3 30.85-75.15 30.85-30.85 75.15-30.85h426.44q25.21 0 47.87 11.33 22.65 11.32 37.61 31.41L899.22-480 678.7-183.52q-14.96 20.09-37.61 31.41-22.66 11.33-47.87 11.33H166.78Z"/>
+            </symbol>
+            <symbol id="strength" viewBox="0 -960 960 960">
+                <path d="m845.22-589.96-256.7-256.69 15.31-15.31q25.82-25.82 62.37-25.61 36.54.22 62.37 26.05l131.82 132.39q25.83 25.83 26.11 62.15.28 36.33-25.54 62.15l-15.74 14.87ZM355.61-99.48q-25.83 25.83-62.44 25.83-36.6 0-62.43-25.83L98.91-231.3q-25.82-25.83-25.54-62.16.28-36.32 26.11-62.15l14.87-14.87 256.13 256.13-14.87 14.87Zm140.48-26.87q-14.26 14.26-34.22 14.26t-34.22-14.26L125.78-428.22q-14.26-14.26-13.98-33.93.29-19.68 14.55-33.94l62.08-62.52q14.27-14.26 33.87-14.26 19.61 0 33.87 14.26l54.53 54.52 145.08-145.65-53.95-53.96q-14.27-14.26-14.27-33.93t14.27-33.94l62.65-63.08q14.26-14.26 33.87-14.26t33.87 14.26l301.87 301.87q14.26 14.26 14.54 34.15.28 19.89-13.98 34.15l-63.08 62.65q-14.27 14.27-34.22 14.27-19.96 0-34.22-14.27l-53.39-53.95L504.09-310.7l53.95 53.96q14.26 14.26 14.55 34.15.28 19.89-13.98 34.16l-62.52 62.08Z"/>
+            </symbol>
+            <symbol id="trend" viewBox="0 -960 960 960">
+                <path d="m135.43-223.04-74.65-74.09 318.05-319.48 160 160 179.73-178.87h-97.78v-106h278.44v277.87h-106v-97.78L538.83-306.43l-160-160-243.4 243.39Z"/>
+            </symbol>
+            <symbol id="percent" viewBox="0 -960 960 960">
+                <path d="M295.55-509.26q-64.29 0-109.25-45.45-44.95-45.45-44.95-109.74 0-64.29 44.95-109.25 44.96-44.95 109.25-44.95 64.29 0 109.74 44.95 45.45 44.96 45.45 109.25 0 64.29-45.45 109.74-45.45 45.45-109.74 45.45Zm-.04-106q20.51 0 34.87-14.36 14.36-14.36 14.36-34.87 0-20.51-14.36-34.34-14.36-13.82-34.87-13.82-20.51 0-34.34 13.82-13.82 13.83-13.82 34.34 0 20.51 13.82 34.87 13.83 14.36 34.34 14.36Zm368.92 474.48q-64.13 0-109.65-45.33-45.52-45.33-45.52-109.46t45.45-109.37q45.45-45.23 109.74-45.23 64.29 0 109.53 45.33 45.24 45.33 45.24 109.45 0 64.13-45.33 109.37-45.33 45.24-109.46 45.24Zm34.4-120.24q13.82-14.25 13.82-34.59 0-20.35-13.82-34.45-13.83-14.11-34.34-14.11-20.51 0-34.87 14.24-14.36 14.24-14.36 34.58 0 20.35 14.36 34.46t34.87 14.11q20.51 0 34.34-14.24ZM214.87-140.78l-74.09-74.09L745.7-819.22l73.52 73.52-604.35 604.92Z"/>
+            </symbol>
+        </svg>
+        
+        <div id="header">
+            <p id="title">MCDb</p>
+            <div id="clock-wrapper">
+                <p id="clock">00:00:00</p>
+            </div>
+        </div>
+        <ul>
+            <li>
+                <div id="config">
+                    <div id="config1" class="item">
+                        <div class="item-content">
+                            <input type="text" id="sku" class="sku" placeholder="Event SKU">
+                            <button id="refresh" class="button">Load Event</button>
+                        </div>
+                    </div>
+                    <div id="config2" class="item">
+                        <div class="item-content">
+                            <input type="text" id="division" class="match-select" pattern="[0-9]*" placeholder="Division ID">
+                            <select id="round" class="match-select">
+                                <option value="">Match Round</option>
+                                <option value="1">1. Practice</option>
+                                <option value="2">2. Qualification</option>
+                                <option value="3">3. Quarterfinal</option>
+                                <option value="4">4. Semifinal</option>
+                                <option value="5">5. Final (V5RC)</option>
+                                <option value="6">6. Round of 16</option>
+                                <option value="15">15. Final (VIQRC)</option>
+                            </select>
+                            <input type="text" id="instance" class="match-select" pattern="[0-9]*" placeholder="Match Instance">
+                            <input type="text" id="number" class="match-select" pattern="[0-9]*" placeholder="Match Number">
+                            <button id="load" class="button">Load Match</button>
+                            <button id="next" class="button">Next</button>
+                        </div>
+                    </div>
+                    <div id="config3" class="item">
+                        <div class="item-content">
+                            <label for="recency">Recency Penalty Duration (mins)</label>
+                            <input type="text" id="recency" class="match-select" pattern="[0-9]*" value="90">
+                        </div>
+                    </div>
+                    <div id="config4" class="item">
+                        <div class="item-content">
+                            <button id="theme" class="button">Toggle Theme</button>
+                        </div>
+                    </div>
+                    <div id="progress" class="item hidden">
+                        <div class="item-content">
+                            <div id="progress-status">Loading match stats...</div>
+                            <div class="progress-track">
+                                <div id="progress-fill"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </li>
+            <li>
+                <div id="teams">
+                    <div id="team1" class="item red">
+                        <div class="item-icon icon-default">
+                            <svg><use href="#team"/></svg>
+                        </div>
+                        <div id="team1-content" class="item-content">
+                            <b>0000A</b> • Team One<br>Organization<br>City, Country
+                        </div>
+                    </div>
+                    <div id="team2" class="item red">
+                        <div class="item-icon icon-default">
+                            <svg><use href="#team"/></svg>
+                        </div>
+                        <div id="team2-content" class="item-content">
+                            <b>0000B</b> • Team Two<br>Organization<br>City, Country
+                        </div>
+                    </div>
+                    <div id="team3" class="item blue">
+                        <div class="item-icon icon-default">
+                            <svg><use href="#team"/></svg>
+                        </div>
+                        <div id="team3-content" class="item-content">
+                            <b>0000C</b> • Team Three<br>Organization<br>City, Country
+                        </div>
+                    </div>
+                    <div id="team4" class="item blue">
+                        <div class="item-icon icon-default">
+                            <svg><use href="#team"/></svg>
+                        </div>
+                        <div id="team4-content" class="item-content">
+                            <b>0000D</b> • Team Four<br>Organization<br>City, Country
+                        </div>
+                    </div>
+                </div>
+            </li>
+            <li>
+                <div id="stats">
+                    <div id="stat1" class="item">
+                        <div class="item-icon icon-default">
+                            <svg><use href="#team"/></svg>
+                        </div>
+                        <div id="stat1-content" class="item-content">
+                            <b>0000A</b> did something
+                        </div>
+                    </div>
+                    <div id="stat2" class="item">
+                        <div class="item-icon icon-default">
+                            <svg><use href="#team"/></svg>
+                        </div>
+                        <div id="stat2-content" class="item-content">
+                            <b>0000B</b> did something
+                        </div>
+                    </div>
+                    <div id="stat3" class="item">
+                        <div class="item-icon icon-default">
+                            <svg><use href="#team"/></svg>
+                        </div>
+                        <div id="stat3-content" class="item-content">
+                            <b>0000C</b> did something
+                        </div>
+                    </div>
+                    <div id="stat4" class="item">
+                        <div class="item-icon icon-default">
+                            <svg><use href="#team"/></svg>
+                        </div>
+                        <div id="stat4-content" class="item-content">
+                            <b>0000D</b> did something
+                        </div>
+                    </div>
+                </div>
+            </li>
+        </ul>
+        <script src="main.js"></script>
+    </body>
+</html>
