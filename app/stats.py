@@ -1,7 +1,9 @@
+import builtins
 import random
 
 # Cache for statistics definitions to avoid repeated queries
 _stats_def_cache = None
+_RANK_STATS = {"EQ", "ES"}
 
 async def _load_stats_definitions(conn):
     global _stats_def_cache
@@ -10,7 +12,7 @@ async def _load_stats_definitions(conn):
     
     async with conn.cursor() as cur:
         await cur.execute("""
-            SELECT type, tier, priority, phrase, eligibility_type, eligibility, iq, elims, matches
+            SELECT type, tier, priority, phrase, unit, eligibility_type, eligibility, iq, elims, matches
             FROM statistics_def
             ORDER BY type, tier
         """)
@@ -48,9 +50,16 @@ async def team_info(conn, team):
         }
     return response
 
-async def team_stats_selection(conn, team, event, round, program, debug=False):
+async def team_stats_selection(conn, team, event, round, program, debug=False, recency_minutes=90):
     async with conn.cursor() as cur:
         selected_stats = []
+
+        def format_stat_value(value, unit):
+            if isinstance(value, (int, float)):
+                value = builtins.round(value)
+            if unit:
+                return f"{value}{unit}"
+            return f"{value}"
         
         # Check if this is a qualification match
         is_qualification = (round == 2)
@@ -59,8 +68,8 @@ async def team_stats_selection(conn, team, event, round, program, debug=False):
         all_defs = await _load_stats_definitions(conn)
         filtered_defs = [
             row for row in all_defs
-            if (row[6] is None or row[6] == (program == 41))
-            and (row[7] is None and is_qualification or row[7] == False and is_qualification or row[7] == True and not is_qualification)
+            if (row[7] is None or not (program == 41 and row[7] is False))
+            and (row[8] is None or not (not is_qualification and row[8] is False))
         ]
         
         if not filtered_defs:
@@ -89,6 +98,8 @@ async def team_stats_selection(conn, team, event, round, program, debug=False):
         # Group event stats by type for efficient lookups
         event_stats = {}
         for stat_type, value in event_stats_rows:
+            if stat_type in _RANK_STATS and (value is None or value <= 0):
+                continue
             if stat_type not in event_stats:
                 event_stats[stat_type] = []
             event_stats[stat_type].append(value)
@@ -98,8 +109,8 @@ async def team_stats_selection(conn, team, event, round, program, debug=False):
             SELECT type FROM statistics_history
             WHERE team = %s AND event = %s AND type = ANY(%s)
             AND type != 'CM'
-            AND shown_at > NOW() - INTERVAL '30 minutes'
-        """, (team, event, stat_types))
+            AND shown_at > NOW() - (%s * INTERVAL '1 minute')
+        """, (team, event, stat_types, recency_minutes))
         shown_stats = {row[0] for row in await cur.fetchall()}
         
         # Group tiers by stat type
@@ -112,15 +123,19 @@ async def team_stats_selection(conn, team, event, round, program, debug=False):
         
         # Process each stat type
         for stat_type, tiers in stat_tiers.items():
+            if stat_type in shown_stats:
+                continue
             # Sort tiers by tier number
             tiers.sort(key=lambda x: x[1])
             
             for tier_data in tiers:
-                stat_type_val, tier, priority, phrase, eligibility_type, eligibility, iq, elims, min_matches = tier_data
+                stat_type_val, tier, priority, phrase, unit, eligibility_type, eligibility, iq, elims, min_matches = tier_data
                 
                 # Get team's stat value from pre-fetched data
                 team_value = team_stats.get(stat_type)
                 if team_value is None:
+                    continue
+                if stat_type in _RANK_STATS and team_value <= 0:
                     continue
                 
                 # Check minimum matches requirement
@@ -134,12 +149,18 @@ async def team_stats_selection(conn, team, event, round, program, debug=False):
                 
                 if eligibility_type == 'top':
                     # Team must be ranked #1 (highest value)
-                    qualifies = all(team_value >= v for v in stat_values)
+                    if stat_type in _RANK_STATS:
+                        qualifies = all(team_value <= v for v in stat_values)
+                    else:
+                        qualifies = all(team_value >= v for v in stat_values)
                 
                 elif eligibility_type == 'percentile':
                     # Team must be in top X percentile
                     if stat_values:
-                        better_count = sum(1 for v in stat_values if v > team_value)
+                        if stat_type in _RANK_STATS:
+                            better_count = sum(1 for v in stat_values if v < team_value)
+                        else:
+                            better_count = sum(1 for v in stat_values if v > team_value)
                         percentile_rank = better_count / len(stat_values)
                         qualifies = (percentile_rank <= eligibility)
                 
@@ -152,14 +173,11 @@ async def team_stats_selection(conn, team, event, round, program, debug=False):
                     qualifies = (team_value <= eligibility)
                 
                 if qualifies:
-                    # Apply 50% penalty to priority if shown recently (use pre-fetched data)
-                    adjusted_priority = priority * 0.5 if stat_type in shown_stats else priority
-                    
                     selected_stats.append({
                         'type': stat_type,
                         'tier': tier,
-                        'priority': adjusted_priority,
-                        'value': team_value,
+                        'priority': priority,
+                        'value': format_stat_value(team_value, unit),
                         'phrase': phrase
                     })
                     break  # Stop checking tiers for this stat type
@@ -169,12 +187,12 @@ async def team_stats_selection(conn, team, event, round, program, debug=False):
             # Get CM definition from cache
             cm_defs = [row for row in all_defs if row[0] == 'CM' and row[1] == 1]
             if cm_defs:
-                cm_priority, cm_phrase = cm_defs[0][2], cm_defs[0][3]
+                cm_priority, cm_phrase, cm_unit = cm_defs[0][2], cm_defs[0][3], cm_defs[0][4]
                 selected_stats.append({
                     'type': 'CM',
                     'tier': 1,
                     'priority': cm_priority,
-                    'value': team_matches,
+                    'value': format_stat_value(team_matches, cm_unit),
                     'phrase': cm_phrase
                 })
         
@@ -304,7 +322,7 @@ async def team_stats_refresh(conn, team, event, match, program):
         await cur.execute("INSERT INTO statistics_event (event, team, type, value) VALUES (%s, %s, 'EA', %s) ON CONFLICT (event, team, type) DO UPDATE SET value = EXCLUDED.value, generated_at = CLOCK_TIMESTAMP()", (event, team, event_avg))
 
         # Season average match score improvement
-        event_improvement = int(event_avg / season_avg_excl * 100) if event_matches > 0 and season_matches_excl > 0 else 0
+        event_improvement = int(((event_avg - season_avg_excl) / season_avg_excl) * 100) if event_matches > 0 and season_matches_excl > 0 else 0
         await cur.execute("INSERT INTO statistics_event (event, team, type, value) VALUES (%s, %s, 'SI', %s) ON CONFLICT (event, team, type) DO UPDATE SET value = EXCLUDED.value, generated_at = CLOCK_TIMESTAMP()", (event, team, event_improvement))
 
         # Event high score
