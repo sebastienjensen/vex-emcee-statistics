@@ -1,12 +1,12 @@
 import asyncio
 import json
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, PlainTextResponse
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.fetch import fetch
 from app.db import pool, insert, event_by_sku, team_by_number
-from app.stats import team_info, team_stats_refresh, team_stats_selection
+from app.stats import team_info, team_stats_refresh, team_stats_selection, team_match_value_stats
 from datetime import datetime
 from pydantic import BaseModel
 
@@ -225,6 +225,44 @@ async def get_id_from_match(event: int, division: int, round: int, instance: int
         raise HTTPException(status_code=404, detail="Match not found")
     
     return {"id": id, "teams": {"red1": red1, "red2": red2, "blue1": blue1, "blue2": blue2}}
+
+@app.get("/stats/match/values/{event}/{division}/{round}/{instance}/{number}", tags=["Stats"])
+async def get_match_value_stats(event: int, division: int, round: int, instance: int, number: int, plain: bool = False):
+    match_data = await get_id_from_match(event, division, round, instance, number)
+    match_id = match_data["id"]
+    teams = match_data["teams"]
+
+    async with pool.connection() as conn:
+        slots = ["red1", "red2", "blue1", "blue2"]
+        per_slot = {}
+
+        for slot in slots:
+            team_id = teams[slot]
+            if team_id is None:
+                continue
+
+            team_stats, info = await asyncio.gather(
+                team_match_value_stats(conn, team_id, event, match_id),
+                team_info(conn, team_id)
+            )
+            per_slot[slot] = {**info, **team_stats}
+
+    response = {}
+    for slot, data in per_slot.items():
+        response[f"{slot}_number"] = data["number"]
+        response[f"{slot}_name"] = data["name"]
+        response[f"{slot}_organization"] = data["organization"]
+        response[f"{slot}_city"] = data["city"]
+        response[f"{slot}_event_average_match_score"] = data["event_average_match_score"]
+        response[f"{slot}_total_matches_played_season"] = data["total_matches_played_season"]
+        response[f"{slot}_season"] = data["season"]
+        response[f"{slot}_event_win_rate"] = data["event_win_rate"]
+
+    if plain:
+        lines = [f"{key}={value}" for key, value in response.items()]
+        return PlainTextResponse("\n".join(lines))
+
+    return response
 
 @app.get("/stats/match/{event}/{division}/{round}/{instance}/{number}/{penalty}", tags=["Stats"])
 async def get_match_stats(event: int, division: int, round: int, instance: int, number: int, penalty: int = 90):

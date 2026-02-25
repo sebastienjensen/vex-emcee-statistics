@@ -438,3 +438,58 @@ async def team_stats_refresh(conn, team, event, match, program):
 
 async def event_stats(conn, event):
     pass
+
+async def team_match_value_stats(conn, team, event, match):
+    async with conn.cursor() as cur:
+        await cur.execute("SELECT season::INTEGER FROM events WHERE id = %s", (event,))
+        row = await cur.fetchone()
+        season = row[0] if row else None
+
+        await cur.execute("""
+            SELECT
+                COUNT(*) FILTER (WHERE team_score IS NOT NULL AND opp_score IS NOT NULL) AS matches_played,
+                COALESCE(SUM(team_score) FILTER (WHERE team_score IS NOT NULL AND opp_score IS NOT NULL), 0) AS total_points,
+                COUNT(*) FILTER (WHERE team_score IS NOT NULL AND opp_score IS NOT NULL AND team_score > opp_score) AS wins
+            FROM (
+                SELECT
+                    CASE
+                        WHEN red1 = %s OR red2 = %s THEN red
+                        WHEN blue1 = %s OR blue2 = %s THEN blue
+                    END AS team_score,
+                    CASE
+                        WHEN red1 = %s OR red2 = %s THEN blue
+                        WHEN blue1 = %s OR blue2 = %s THEN red
+                    END AS opp_score
+                FROM matches
+                WHERE event = %s
+                  AND round = 2
+                  AND id < %s
+                  AND (red1 = %s OR red2 = %s OR blue1 = %s OR blue2 = %s)
+            ) AS event_team_matches
+        """, (team, team, team, team, team, team, team, team, event, match, team, team, team, team))
+        row = await cur.fetchone()
+        event_matches = row[0] if row else 0
+        event_total_points = row[1] if row else 0
+        event_wins = row[2] if row else 0
+
+        await cur.execute("""
+            SELECT COUNT(*)
+            FROM matches
+            WHERE season = %s
+              AND id < %s
+              AND (red1 = %s OR red2 = %s OR blue1 = %s OR blue2 = %s)
+              AND red IS NOT NULL
+              AND blue IS NOT NULL
+        """, (season, match, team, team, team, team))
+        row = await cur.fetchone()
+        season_matches = row[0] if row else 0
+
+    event_average = (event_total_points / event_matches) if event_matches > 0 else 0
+    event_win_rate = ((event_wins / event_matches) * 100) if event_matches > 0 else 0
+
+    return {
+        "event_average_match_score": builtins.round(event_average, 2),
+        "total_matches_played_season": season_matches,
+        "season": season,
+        "event_win_rate": builtins.round(event_win_rate, 2)
+    }
